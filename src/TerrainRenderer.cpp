@@ -28,10 +28,18 @@ out vec4 FragColor;
 in vec3 FragPos;
 in vec3 Normal;
 
+uniform vec3 colorSnow;
+uniform vec3 colorRock;
+uniform vec3 colorGrass;
+uniform vec3 colorDirt;
+
+uniform float heightSnow;
+uniform float heightGrass;
+uniform float slopeRock;
+
 void main() {
+    // Basic Lighting
     vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
-    vec3 objectColor = vec3(0.3, 0.6, 0.3); 
-    
     float ambientStrength = 0.2;
     vec3 ambient = ambientStrength * vec3(1.0);
     
@@ -39,7 +47,25 @@ void main() {
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * vec3(1.0);
     
-    vec3 result = (ambient + diffuse) * objectColor;
+    // --- TEXTURE SPLATTING LOGIC ---
+    
+    // 1. Calculate Slope (1.0 = vertical wall, 0.0 = flat ground)
+    float slope = 1.0 - norm.y; 
+    
+    // 2. Base Height Texturing (Dirt -> Grass -> Snow)
+    // Smoothstep creates a soft gradient blend instead of a hard jagged line
+    float h = FragPos.y;
+    vec3 groundColor = mix(colorDirt, colorGrass, smoothstep(heightGrass - 5.0, heightGrass + 5.0, h));
+    groundColor = mix(groundColor, colorSnow, smoothstep(heightSnow - 10.0, heightSnow + 10.0, h));
+    
+    // 3. Slope Texturing (Blend in Rock where the terrain is steep)
+    float rockBlend = smoothstep(slopeRock - 0.1, slopeRock + 0.1, slope);
+    
+    // 4. Final Material Composition
+    vec3 finalMaterial = mix(groundColor, colorRock, rockBlend);
+    
+    // Combine lighting with material
+    vec3 result = (ambient + diffuse) * finalMaterial;
     FragColor = vec4(result, 1.0);
 }
 )";
@@ -58,33 +84,37 @@ TerrainRenderer::~TerrainRenderer() {
 
 void TerrainRenderer::BindBuffers(unsigned int VBO, const std::vector<unsigned int>& indices) {
     glBindVertexArray(VAO);
-
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
     indexCount = indices.size();
-
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
     glEnableVertexAttribArray(0);
-
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
     glEnableVertexAttribArray(1);
 
     glBindVertexArray(0);
 }
 
-void TerrainRenderer::Draw(const glm::mat4& view, const glm::mat4& projection) {
+void TerrainRenderer::Draw(const glm::mat4& view, const glm::mat4& projection, const RenderSettings& settings) {
     glUseProgram(shaderProgram);
 
+    // Set matrices
     glm::mat4 model = glm::mat4(1.0f);
-    unsigned int modelLoc = glGetUniformLocation(shaderProgram, "model");
-    unsigned int viewLoc = glGetUniformLocation(shaderProgram, "view");
-    unsigned int projLoc = glGetUniformLocation(shaderProgram, "projection");
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    // Set texturing uniforms
+    glUniform3fv(glGetUniformLocation(shaderProgram, "colorSnow"), 1, glm::value_ptr(settings.colorSnow));
+    glUniform3fv(glGetUniformLocation(shaderProgram, "colorRock"), 1, glm::value_ptr(settings.colorRock));
+    glUniform3fv(glGetUniformLocation(shaderProgram, "colorGrass"), 1, glm::value_ptr(settings.colorGrass));
+    glUniform3fv(glGetUniformLocation(shaderProgram, "colorDirt"), 1, glm::value_ptr(settings.colorDirt));
+
+    glUniform1f(glGetUniformLocation(shaderProgram, "heightSnow"), settings.heightSnow);
+    glUniform1f(glGetUniformLocation(shaderProgram, "heightGrass"), settings.heightGrass);
+    glUniform1f(glGetUniformLocation(shaderProgram, "slopeRock"), settings.slopeRock);
 
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
@@ -96,8 +126,7 @@ unsigned int TerrainRenderer::CompileShader(unsigned int type, const char* sourc
     glShaderSource(shader, 1, &source, NULL);
     glCompileShader(shader);
 
-    int success;
-    char infoLog[512];
+    int success; char infoLog[512];
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
         glGetShaderInfoLog(shader, 512, NULL, infoLog);
