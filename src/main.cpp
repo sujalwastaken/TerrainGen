@@ -1,6 +1,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <implot.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <glm/glm.hpp>
@@ -129,6 +130,7 @@ int main() {
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 430");
 
@@ -154,10 +156,15 @@ int main() {
 
     RenderSettings renderSettings;
 
+    const int SLOPE_BINS = 20;
+    std::vector<float> slopeData(SLOPE_BINS, 0.0f); // Pre-fill with 20 zeroes
+
     lastGenerationTime = generator.Generate(
         baseMapInfluence, noiseFrequency, octaves, heightScale,
         applyErosion, erosionIterations, talusAngle, erosionRate
     );
+
+    slopeData = generator.GetSlopeDistribution(SLOPE_BINS);
 
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime());
@@ -219,6 +226,43 @@ int main() {
                 baseMapInfluence, noiseFrequency, octaves, heightScale,
                 applyErosion, erosionIterations, talusAngle, erosionRate
             );
+            slopeData = generator.GetSlopeDistribution(SLOPE_BINS);
+        }
+
+        ImGui::End();
+
+        ImGui::Begin("Analytics Dashboard");
+        if (ImGui::CollapsingHeader("Playability Scoring", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Text("Slope Distribution Histogram");
+
+            if (ImPlot::BeginPlot("##SlopeDist", ImVec2(-1, 250))) {
+                ImPlot::SetupAxes("Steepness (Degrees)", "Terrain %", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+                ImPlot::SetupAxesLimits(0, 90, 0, 100);
+
+                // ImPlot expects C-style arrays for drawing
+                double x_positions[SLOPE_BINS];
+                double y_values[SLOPE_BINS];
+                double binWidth = 90.0 / SLOPE_BINS;
+
+                for (int i = 0; i < SLOPE_BINS; ++i) {
+                    x_positions[i] = (i * binWidth) + (binWidth * 0.5); // Center of bin
+                    y_values[i] = slopeData[i];
+                }
+
+                ImPlot::PlotBars("Slope %", x_positions, y_values, SLOPE_BINS, binWidth * 0.9);
+                ImPlot::EndPlot();
+            }
+
+            // Calculate a quick "Playability Score" based on steepness
+            float unplayablePercent = 0.0f;
+            for (int i = SLOPE_BINS / 2; i < SLOPE_BINS; ++i) unplayablePercent += slopeData[i]; // Roughly > 45 degrees
+
+            if (unplayablePercent > 50.0f) {
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Warning: %.1f%% of terrain is > 45 degrees (Unplayable)", unplayablePercent);
+            }
+            else {
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Good: Terrain is mostly traversable.");
+            }
         }
         ImGui::End();
 
@@ -240,6 +284,7 @@ int main() {
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
     glfwTerminate();
 

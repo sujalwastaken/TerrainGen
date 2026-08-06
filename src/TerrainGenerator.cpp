@@ -4,6 +4,7 @@
 #include <glad/glad.h>
 #include <iostream>
 #include <chrono>
+#include <algorithm>
 
 // --- SHADER 1: BASE GENERATION ---
 const char* computeShaderSource = R"(
@@ -335,4 +336,33 @@ unsigned int TerrainGenerator::CompileComputeShader(const char* source) {
 
     glDeleteShader(shader);
     return program;
+}
+
+std::vector<float> TerrainGenerator::GetSlopeDistribution(int numBins) {
+    std::vector<float> bins(numBins, 0.0f);
+    if (VBO == 0) return bins;
+
+    size_t vertexCount = gridWidth * gridDepth;
+    std::vector<Vertex> localVertices(vertexCount);
+
+    // 1. Download the generated SSBO data back to the CPU
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, VBO);
+    glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, vertexCount * sizeof(Vertex), localVertices.data());
+
+    // 2. Calculate slopes
+    for (const auto& v : localVertices) {
+        // Normal.y is 1.0 (flat) to 0.0 (vertical wall). acos() gets the angle in radians.
+        float angle = glm::degrees(acos(glm::clamp(v.Normal.y, 0.0f, 1.0f)));
+
+        // Map 0-90 degrees into our bin array
+        int binIdx = std::clamp(static_cast<int>((angle / 90.0f) * numBins), 0, numBins - 1);
+        bins[binIdx] += 1.0f;
+    }
+
+    // 3. Normalize to percentages
+    for (float& b : bins) {
+        b = (b / vertexCount) * 100.0f;
+    }
+
+    return bins;
 }

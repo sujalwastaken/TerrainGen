@@ -6,6 +6,7 @@
     "glad",
     "glm",
     "stb",
+    "implot",
     {
       "name": "imgui",
       "features": [

@@ -24,6 +24,7 @@ public:
     unsigned int GetVBO() const { return VBO; }
     int GetIndexCount() const { return indices.size(); }
     const std::vector<unsigned int>& GetIndices() const { return indices; }
+    std::vector<float> GetSlopeDistribution(int numBins);
 
 private:
     unsigned int VBO;
