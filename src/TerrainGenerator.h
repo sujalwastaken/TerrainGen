@@ -13,8 +13,11 @@ public:
     TerrainGenerator();
     ~TerrainGenerator();
 
-    // Now returns the time taken in milliseconds
-    float Generate(float baseInfluence, float noiseFreq, int octaves, float heightScale);
+    // Updated signature to include erosion parameters
+    float Generate(float baseInfluence, float noiseFreq, int octaves, float heightScale,
+        bool applyErosion = false, int erosionIterations = 10,
+        float talusAngle = 0.5f, float erosionRate = 0.1f);
+
     void LoadSeedMap(const std::string& imagePath);
     void GenerateTopology(int width, int depth);
 
@@ -25,6 +28,8 @@ public:
 private:
     unsigned int VBO;
     unsigned int computeShader;
+    unsigned int erosionShader; // New shader for physics
+    unsigned int normalShader;
     unsigned int seedTexture;
 
     int gridWidth = 256;
@@ -32,5 +37,6 @@ private:
 
     std::vector<unsigned int> indices;
 
-    unsigned int CompileComputeShader();
+    // Updated signature to accept the shader string
+    unsigned int CompileComputeShader(const char* source);
 };

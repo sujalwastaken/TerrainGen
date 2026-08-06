@@ -43,19 +43,31 @@ int main() {
     generator.LoadSeedMap("../../../assets/seed_map.png");
     renderer.BindBuffers(generator.GetVBO(), generator.GetIndices());
 
-    // Dashboard State
+    // --- Dashboard State Variables ---
+    // Base Generation
     float baseMapInfluence = 0.5f;
     float noiseFrequency = 0.02f;
     int octaves = 4;
     float heightScale = 30.0f;
+
+    // Thermal Erosion Physics
+    bool applyErosion = false;
+    int erosionIterations = 10;
+    float talusAngle = 0.5f;
+    float erosionRate = 0.1f;
+
+    // UI/Rendering State
     bool wireframe = false;
     bool autoUpdate = true;
     float lastGenerationTime = 0.0f;
 
-    // Run initial generation pass
-    lastGenerationTime = generator.Generate(baseMapInfluence, noiseFrequency, octaves, heightScale);
+    // 4. Run initial generation pass (Explicitly passing all parameters fixes C2668)
+    lastGenerationTime = generator.Generate(
+        baseMapInfluence, noiseFrequency, octaves, heightScale,
+        applyErosion, erosionIterations, talusAngle, erosionRate
+    );
 
-    // 4. Main loop
+    // 5. Main loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -63,27 +75,44 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Dashboard
+        // Dashboard Window
         ImGui::Begin("Terrain Settings");
         bool needsUpdate = false;
 
         ImGui::Text("GPU Compute Performance");
         ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Generation Time: %.3f ms", lastGenerationTime);
-        ImGui::Separator();
 
-        if (ImGui::SliderFloat("Base Map Influence", &baseMapInfluence, 0.0f, 1.0f)) needsUpdate = true;
-        if (ImGui::SliderFloat("Noise Frequency", &noiseFrequency, 0.001f, 0.1f)) needsUpdate = true;
+        ImGui::Separator();
+        ImGui::Text("Procedural Base");
+        if (ImGui::SliderFloat("Map Influence", &baseMapInfluence, 0.0f, 1.0f)) needsUpdate = true;
+        if (ImGui::SliderFloat("Noise Freq", &noiseFrequency, 0.001f, 0.1f)) needsUpdate = true;
         if (ImGui::SliderInt("Noise Octaves", &octaves, 1, 8)) needsUpdate = true;
         if (ImGui::SliderFloat("Height Scale", &heightScale, 5.0f, 100.0f)) needsUpdate = true;
 
+        // New Erosion Controls Section
         ImGui::Separator();
+        ImGui::Text("Thermal Erosion Physics");
+        if (ImGui::Checkbox("Apply Erosion", &applyErosion)) needsUpdate = true;
+
+        if (applyErosion) {
+            if (ImGui::SliderInt("Iterations", &erosionIterations, 1, 100)) needsUpdate = true;
+            if (ImGui::SliderFloat("Talus Angle", &talusAngle, 0.1f, 2.0f)) needsUpdate = true;
+            if (ImGui::SliderFloat("Erosion Rate", &erosionRate, 0.01f, 0.5f)) needsUpdate = true;
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Rendering");
         ImGui::Checkbox("Auto-Update on Drag", &autoUpdate);
         if (ImGui::Checkbox("Wireframe Mode", &wireframe)) {
             glPolygonMode(GL_FRONT_AND_BACK, wireframe ? GL_LINE : GL_FILL);
         }
 
+        // Trigger Regeneration
         if ((needsUpdate && autoUpdate) || ImGui::Button("Force Regenerate")) {
-            lastGenerationTime = generator.Generate(baseMapInfluence, noiseFrequency, octaves, heightScale);
+            lastGenerationTime = generator.Generate(
+                baseMapInfluence, noiseFrequency, octaves, heightScale,
+                applyErosion, erosionIterations, talusAngle, erosionRate
+            );
         }
         ImGui::End();
 
