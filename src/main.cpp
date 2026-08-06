@@ -208,10 +208,12 @@ int main() {
             ImGui::ColorEdit3("Rock Color", glm::value_ptr(renderSettings.colorRock));
             ImGui::ColorEdit3("Grass Color", glm::value_ptr(renderSettings.colorGrass));
             ImGui::ColorEdit3("Dirt Color", glm::value_ptr(renderSettings.colorDirt));
+            ImGui::ColorEdit3("Sand Color", glm::value_ptr(renderSettings.colorSand));
 
             ImGui::Text("Thresholds");
             ImGui::SliderFloat("Snow Height", &renderSettings.heightSnow, 0.0f, 100.0f);
-            ImGui::SliderFloat("Grass Height", &renderSettings.heightGrass, 0.0f, 40.0f);
+            ImGui::SliderFloat("Grass Height", &renderSettings.heightGrass, -30.0f, 40.0f);
+            ImGui::SliderFloat("Dirt Height", &renderSettings.heightDirt, -30.0f, 20.0f);
             ImGui::SliderFloat("Rock Steepness", &renderSettings.slopeRock, 0.0f, 1.0f);
         }
 

@@ -10,10 +10,12 @@ struct RenderSettings {
     glm::vec3 colorRock = glm::vec3(0.35f, 0.35f, 0.35f);
     glm::vec3 colorGrass = glm::vec3(0.2f, 0.45f, 0.15f);
     glm::vec3 colorDirt = glm::vec3(0.35f, 0.28f, 0.2f);
+    glm::vec3 colorSand = glm::vec3(0.76f, 0.7f, 0.5f);
 
-    float heightSnow = 40.0f;
-    float heightGrass = 10.0f;
-    float slopeRock = 0.2f; // 0.0 is flat, 1.0 is vertical wall
+    float heightSnow = 0.0f;
+    float heightGrass = -10.0f;
+    float heightDirt = -15.0f;
+    float slopeRock = 0.2f;
 };
 
 class TerrainRenderer {

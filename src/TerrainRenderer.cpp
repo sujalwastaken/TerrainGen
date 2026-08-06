@@ -32,13 +32,14 @@ uniform vec3 colorSnow;
 uniform vec3 colorRock;
 uniform vec3 colorGrass;
 uniform vec3 colorDirt;
+uniform vec3 colorSand;
 
 uniform float heightSnow;
 uniform float heightGrass;
+uniform float heightDirt; 
 uniform float slopeRock;
 
 void main() {
-    // Basic Lighting
     vec3 lightDir = normalize(vec3(0.5, 1.0, 0.3));
     float ambientStrength = 0.2;
     vec3 ambient = ambientStrength * vec3(1.0);
@@ -47,24 +48,18 @@ void main() {
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * vec3(1.0);
     
-    // --- TEXTURE SPLATTING LOGIC ---
-    
-    // 1. Calculate Slope (1.0 = vertical wall, 0.0 = flat ground)
     float slope = 1.0 - norm.y; 
-    
-    // 2. Base Height Texturing (Dirt -> Grass -> Snow)
-    // Smoothstep creates a soft gradient blend instead of a hard jagged line
     float h = FragPos.y;
-    vec3 groundColor = mix(colorDirt, colorGrass, smoothstep(heightGrass - 5.0, heightGrass + 5.0, h));
+    
+    // TEXTURE SPLATTING (Now with negative height support!)
+    // Base is Sand. Transitions to Dirt, then Grass, then Snow.
+    vec3 groundColor = mix(colorSand, colorDirt, smoothstep(heightDirt - 2.0, heightDirt + 2.0, h));
+    groundColor = mix(groundColor, colorGrass, smoothstep(heightGrass - 5.0, heightGrass + 5.0, h));
     groundColor = mix(groundColor, colorSnow, smoothstep(heightSnow - 10.0, heightSnow + 10.0, h));
     
-    // 3. Slope Texturing (Blend in Rock where the terrain is steep)
     float rockBlend = smoothstep(slopeRock - 0.1, slopeRock + 0.1, slope);
-    
-    // 4. Final Material Composition
     vec3 finalMaterial = mix(groundColor, colorRock, rockBlend);
     
-    // Combine lighting with material
     vec3 result = (ambient + diffuse) * finalMaterial;
     FragColor = vec4(result, 1.0);
 }
@@ -111,10 +106,13 @@ void TerrainRenderer::Draw(const glm::mat4& view, const glm::mat4& projection, c
     glUniform3fv(glGetUniformLocation(shaderProgram, "colorRock"), 1, glm::value_ptr(settings.colorRock));
     glUniform3fv(glGetUniformLocation(shaderProgram, "colorGrass"), 1, glm::value_ptr(settings.colorGrass));
     glUniform3fv(glGetUniformLocation(shaderProgram, "colorDirt"), 1, glm::value_ptr(settings.colorDirt));
+    glUniform3fv(glGetUniformLocation(shaderProgram, "colorSand"), 1, glm::value_ptr(settings.colorSand));
+
 
     glUniform1f(glGetUniformLocation(shaderProgram, "heightSnow"), settings.heightSnow);
     glUniform1f(glGetUniformLocation(shaderProgram, "heightGrass"), settings.heightGrass);
     glUniform1f(glGetUniformLocation(shaderProgram, "slopeRock"), settings.slopeRock);
+    glUniform1f(glGetUniformLocation(shaderProgram, "heightDirt"), settings.heightDirt);
 
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
