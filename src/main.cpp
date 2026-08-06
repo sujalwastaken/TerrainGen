@@ -11,37 +11,131 @@
 #include "TerrainGenerator.h"
 #include "TerrainRenderer.h"
 
-const unsigned int SCR_WIDTH = 1280;
-const unsigned int SCR_HEIGHT = 720;
+// --- GLOBALS (Changed from const so they can update on resize) ---
+unsigned int windowWidth = 1280;
+unsigned int windowHeight = 720;
+
+// --- CAMERA STATE ---
+glm::vec3 cameraPos = glm::vec3(0.0f, 100.0f, 150.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, -0.5f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+bool uiMode = true;
+bool firstMouse = true;
+float yaw = -90.0f;
+float pitch = -30.0f;
+float lastX = windowWidth / 2.0f;
+float lastY = windowHeight / 2.0f;
+
+// --- TIMING ---
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+// --- INPUT & RESIZE CALLBACKS ---
+void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    // Make sure the viewport matches the new window dimensions
+    glViewport(0, 0, width, height);
+    windowWidth = width;
+    windowHeight = height;
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        uiMode = !uiMode;
+        if (uiMode) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+        else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            firstMouse = true;
+        }
+    }
+}
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
+    if (uiMode) return;
+
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f;
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    if (pitch > 89.0f) pitch = 89.0f;
+    if (pitch < -89.0f) pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(front);
+}
+
+void processInput(GLFWwindow* window) {
+    if (uiMode) return;
+
+    float cameraSpeed = 75.0f * deltaTime;
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraFront;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+        cameraPos += cameraSpeed * cameraUp;
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+        cameraPos -= cameraSpeed * cameraUp;
+}
 
 int main() {
-    // 1. Initialize GLFW & GLAD
     if (!glfwInit()) return -1;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Realistic Terrain Generator", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "Realistic Terrain Generator", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return -1;
     }
     glfwMakeContextCurrent(window);
 
+    // Set up Callbacks
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) return -1;
     glEnable(GL_DEPTH_TEST);
 
-    // 2. Initialize ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 430");
 
-    // 3. Setup Architecture
     TerrainGenerator generator;
     TerrainRenderer renderer;
 
-    generator.LoadSeedMap("../assets/seed_map.png");
+    generator.LoadSeedMap("../../../assets/seed_map.png");
     renderer.BindBuffers(generator.GetVBO(), generator.GetIndices());
 
     float baseMapInfluence = 0.5f;
@@ -58,7 +152,6 @@ int main() {
     bool autoUpdate = true;
     float lastGenerationTime = 0.0f;
 
-    // ADDED: Texturing Settings
     RenderSettings renderSettings;
 
     lastGenerationTime = generator.Generate(
@@ -66,17 +159,23 @@ int main() {
         applyErosion, erosionIterations, talusAngle, erosionRate
     );
 
-    // 5. Main loop
     while (!glfwWindowShouldClose(window)) {
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        processInput(window);
         glfwPollEvents();
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Dashboard Window
         ImGui::Begin("Terrain Dashboard");
-        bool needsUpdate = false;
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Press [ESC] to toggle Camera / UI Mode");
+        ImGui::Separator();
 
+        bool needsUpdate = false;
         ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Generation Time: %.3f ms", lastGenerationTime);
         ImGui::Separator();
 
@@ -96,7 +195,6 @@ int main() {
             }
         }
 
-        // ADDED: Texturing & Biome Controls
         if (ImGui::CollapsingHeader("Biome & Splatting", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Color Palette");
             ImGui::ColorEdit3("Snow Color", glm::value_ptr(renderSettings.colorSnow));
@@ -127,14 +225,12 @@ int main() {
         glClearColor(0.1f, 0.15f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Simple rotating camera (Will be replaced in Step 2!)
-        float time = (float)glfwGetTime();
-        float camX = sin(time * 0.2f) * 150.0f;
-        float camZ = cos(time * 0.2f) * 150.0f;
-        glm::mat4 view = glm::lookAt(glm::vec3(camX, 100.0f, camZ), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+        // Calculate dynamic aspect ratio to prevent stretching on resize
+        float aspect = (float)windowWidth / (float)(windowHeight == 0 ? 1 : windowHeight); // Prevent divide-by-zero if minimized
 
-        // Render with new settings
+        glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        glm::mat4 projection = glm::perspective(glm::radians(60.0f), aspect, 0.1f, 1000.0f);
+
         renderer.Draw(view, projection, renderSettings);
 
         ImGui::Render();
